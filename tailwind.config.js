@@ -12,6 +12,9 @@ export default {
                 'secondary': '#F59E0B',
             },
         },
+        fontFamily: {
+            outfit: ['Outfit', 'sans-serif'],
+        },
     },
     plugins: [],
 }
