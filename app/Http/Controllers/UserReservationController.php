@@ -161,8 +161,6 @@ class UserReservationController extends Controller
     }
 
 
-
-
     public function store(Request $request)
     {
         Config::$serverKey = config('midtrans.server_key');

@@ -113,4 +113,84 @@ class UserMachineController extends Controller
         Log::info("Machine {$machineNumber} is available.");
         return true;  // Mesin tersedia jika tidak ada reservasi yang aktif saat ini
     }
+
+    public function show(Request $request, $params)
+    {
+        try {
+            // Validasi input
+            if ($params !== 'WASHING' && $params !== 'DRYING') {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Bad Request',
+                ], 400);
+            }
+            if (!$request->query('date')) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Harus memiliki query date',
+                ], 400);
+            }
+
+            // Validasi format tanggal
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $request->query('date'))) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Query date harus dalam format YYYY-MM-DD',
+                ], 400);
+            }
+
+            // Generate daftar waktu setengah jam (00:00, 00:30, 01:00, dst.)
+            $times = [];
+            for ($i = 0; $i < 24; $i += 0.5) {
+                $times[] = sprintf('%02d:%02d', floor($i), round(60 * ($i - floor($i))));
+            }
+
+            // Inisialisasi array untuk menandai ketersediaan
+            $filteredAvailable = [];
+            foreach ($times as $time) {
+                $filteredAvailable[] = [
+                    'time' => $time,
+                    'is_available' => true,  // Asumsikan semua waktu tersedia dulu
+                ];
+            }
+
+            // Ambil data reservasi untuk tanggal dan mesin yang diminta
+            $date = Carbon::parse($request->query('date'));
+            $reservations = Reservation::whereBetween('reservation_date', [
+                $date->startOfDay()->format('Y-m-d\TH:i:s.u\Z'),
+                $date->endOfDay()->format('Y-m-d\TH:i:s.u\Z'),
+            ])
+                ->join('machines', 'reservations.machine_id', '=', 'machines.id')
+                ->where('machines.name', $params)
+                ->whereIn('reservations.status', ['PAID', 'PENDING'])
+                ->select('reservations.*', 'machines.name as machine_name')
+                ->get();
+
+            // Loop melalui setiap reservasi dan sesuaikan waktu yang terpengaruh
+            foreach ($reservations as $reservation) {
+                // Ambil waktu dari reservation_date, hanya bagian hh:mm
+                $reservationTime = Carbon::parse($reservation->reservation_date)->format('H:i');
+
+                // Cari waktu yang cocok di array filteredAvailable dan tandai sebagai tidak tersedia
+                foreach ($filteredAvailable as &$timeSlot) {
+                    if ($timeSlot['time'] === $reservationTime) {
+                        $timeSlot['is_available'] = false;
+                    }
+                }
+            }
+
+            // Kembalikan hasil filteredAvailable
+            return response()->json([
+                'status' => 200,
+                'message' => 'Data ketersediaan mesin',
+                'data' => $filteredAvailable,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => 'Internal Server Error',
+                'errors' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
