@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\UserAuthController;
+use App\Http\Controllers\UserProfileController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +16,13 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+Route::post('auth/login', [UserAuthController::class, 'login']);
+Route::post('auth/register', [UserAuthController::class, 'register']);
+
+Route::middleware('auth:sanctum')->group(function () {
+    // Profile Routes
+    Route::get('/profile', [UserProfileController::class, 'show']);
+    Route::put('/profile', [UserProfileController::class, 'update']);
+    Route::post('/profile', [UserProfileController::class, 'updatePicture']);
+    Route::delete('/profile', [UserProfileController::class, 'deletePicture']);
 });

@@ -21,13 +21,14 @@ Route::get('/', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/', [AuthController::class, 'login']);
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+Route::get('/logout', [AuthController::class, 'logout'])->name('logout');
 
 
 // Route untuk halaman dashboard yang hanya bisa diakses oleh admin
 Route::middleware(['admin'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::resource('transactions', TransactionController::class);
-    Route::resource('machine', MachineController::class);
+    Route::resource('transactions', TransactionController::class)->only(['index', 'show']);
+    Route::get('/machine', [MachineController::class, 'index'])->name('machine.index');
+    Route::post('/machine', [MachineController::class, 'update'])->name('machine.update');
 });
 
