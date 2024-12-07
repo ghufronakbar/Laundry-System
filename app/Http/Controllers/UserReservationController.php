@@ -11,18 +11,165 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Midtrans\Config;
 use Midtrans\Snap;
+use Midtrans\Transaction as MidtransTransaction;
 
 class UserReservationController extends Controller
 
 {
+
+    public function index(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json([
+                'status' => 400,
+                'message' => 'Unauthorized',
+            ], 400);
+        }
+
+        $reservations = Reservation::where('user_id', $user->id)
+            ->leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
+            ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total')->get();
+
+        $reservations->each(function ($reservation) {
+            if (Carbon::now()->greaterThan($reservation->created_at->addMinutes(30)) && $reservation->status !== 'PAID' && $reservation->status !== 'CANCELLED') {
+                $reservation->status = 'EXPIRED';
+                $reservation->save();
+            }
+        });
+
+
+        $reservations = Reservation::where('user_id', $user->id)
+            ->leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
+            ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total')->get();
+
+        $completed = $reservations->filter(function ($reservation) {
+            return $reservation->status === 'PAID' && Carbon::now()->greaterThan($reservation->reservation_end);
+        })->values();
+
+        $on_going = $reservations->filter(function ($reservation) {
+            return $reservation->status === 'PAID' && Carbon::now()->lessThanOrEqualTo($reservation->reservation_end);
+        })->values();
+
+        $cancelled = $reservations->filter(function ($reservation) {
+            return $reservation->status === 'CANCELLED' || $reservation->status === 'EXPIRED' || ($reservation->status !== 'PAID' && Carbon::now()->greaterThan($reservation->created_at->addMinutes(30)));
+        })->values();
+
+        $unpaid = $reservations->filter(function ($reservation) {
+            return $reservation->status === 'PENDING';
+        })->values();
+
+        $data = [
+            'completed' => $completed,
+            'on_going' => $on_going,
+            'cancelled' => $cancelled,
+            'unpaid' => $unpaid
+        ];
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Riwayat Reservasi',
+            'data' => $data,
+        ], 200);
+    }
+
+    public function show(Request $request, $id)
+    {
+        try {
+            Config::$serverKey = config('midtrans.server_key');
+            Config::$clientKey = config('midtrans.client_key');
+            Config::$isProduction = config('midtrans.is_production');
+            Config::$isSanitized = true;
+            Config::$is3ds = true;
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Unauthorized',
+                ], 400);
+            }
+
+            // Ambil data reservation beserta pembayaran yang terkait
+            $reservation = Reservation::leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
+                ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total', 'payments.payment_method', 'payments.paid_at', 'payments.direct_url',)
+                ->find($id);
+
+            if (!$reservation) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Tidak ada data',
+                ], 400);
+            }
+            $payment = Payment::where('reservation_id', $reservation->id)->first();
+            $status = null; // @var object|null $status
+            if (!$payment) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Tidak ada data',
+                ], 400);
+            }
+
+            if ($payment->paid_at !== null) {
+                $status = MidtransTransaction::status($reservation->id);
+            }
+
+            if ($reservation->status !== 'PAID' || $payment->payment_method === null || $payment->paid_at === null) {
+                try {
+                    $status = MidtransTransaction::status($reservation->id);
+                    if (isset($status->transaction_status) && $status->transaction_status === 'settlement') {
+                        $payment->payment_method = $status->payment_type;
+                        $payment->paid_at = Carbon::parse($status->settlement_time)->format('Y-m-d\TH:i:s.u\Z');
+                        $payment->save();
+
+                        $reservation->status = 'PAID';
+                        $reservation->save();
+                    }
+                } catch (\Exception $e) {
+                }
+            }
+
+            // Tentukan custom status untuk reservasi berdasarkan statusnya
+            $reservation = Reservation::leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
+                ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total', 'payments.payment_method', 'payments.paid_at', 'payments.direct_url',)
+                ->find($id);
+            if ($reservation->status === 'PAID' && Carbon::now()->greaterThan($reservation->reservation_end)) {
+                $reservation->custom_status = 'COMPLETED';
+            } else if ($reservation->status === 'PAID' && Carbon::now()->lessThanOrEqualTo($reservation->reservation_end)) {
+                $reservation->custom_status = 'ON_GOING';
+            } else if ($reservation->status === 'CANCELLED' || $reservation->status === 'EXPIRED' || ($reservation->status !== 'PAID' && Carbon::now()->greaterThan($reservation->created_at->addMinutes(30)))) {
+                $reservation->custom_status = 'CANCELLED';
+            } else if ($reservation->status === 'PENDING') {
+                $reservation->custom_status = 'UNPAID';
+            }
+
+            $reservationData = $reservation->toArray();
+            $reservationData['midtrans_status'] = $status;
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Detail Reservasi',
+                'data' => $reservationData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => 'Internal Server Error',
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+
+
 
     public function store(Request $request)
     {
         Config::$serverKey = config('midtrans.server_key');
         Config::$clientKey = config('midtrans.client_key');
         Config::$isProduction = config('midtrans.is_production');
-        Config::$isSanitized = true;  // optional, jika ingin sanitize input
-        Config::$is3ds = true; // optional, jika ingin menggunakan 3DS
+        Config::$isSanitized = true;
+        Config::$is3ds = true;
 
         $user = Auth::user();
         if (!$user) {
@@ -63,9 +210,13 @@ class UserReservationController extends Controller
             ], 400);
         }
 
+
         $reservation = Reservation::where('machine_id', $request->machine_id)
-            ->where('reservation_date', $request->date . ' ' . $request->time)
+            ->where('reservation_date', Carbon::parse($request->date . ' ' . $request->time)->format('Y-m-d\TH:i:s.u') . 'Z')
             ->where('machine_number', $request->machine_number)
+            ->where(function ($query) {
+                $query->where('status', 'PAID')->orWhere('status', 'PENDING');
+            })
             ->first();
 
         if ($reservation) {
@@ -79,8 +230,12 @@ class UserReservationController extends Controller
             $reservation = new Reservation();
             $reservation->machine_id = $request->machine_id;
             $reservation->machine_number = $request->machine_number;
-            $reservation->reservation_date = $request->date . ' ' . $request->time;
-            $reservation->reservation_end = Carbon::parse($request->date . ' ' . $request->time)->addMinutes(30)->format('Y-m-d H:i');
+            $reservation->reservation_date = Carbon::parse($request->date . ' ' . $request->time)->format('Y-m-d\TH:i:s.u') . 'Z';
+            $reservation->reservation_end = Carbon::parse($request->date . ' ' . $request->time)->addMinutes(30)->format('Y-m-d\TH:i:s.u') . 'Z';
+            // return response()->json([
+            //     'reservation_date' => Carbon::parse($request->date . ' ' . $request->time)->format('Y-m-d\TH:i:s.u') . 'Z',
+            //     'reservation_end' => Carbon::parse($request->date . ' ' . $request->time)->addMinutes(30)->format('Y-m-d\TH:i:s.u') . 'Z',
+            // ]);
             $reservation->status = 'PENDING';
             $reservation->user_id = $user->id;
             $reservation->total = $machine->price;
@@ -95,25 +250,30 @@ class UserReservationController extends Controller
             $transaction = [
                 'transaction_details' => $transactionDetails,
             ];
-            // 'reservation_id', 'total', 'payment_method', 'snap_token', 'paid_at'
+
+            // Generate Snap Token and Redirect URL
             $snapToken = Snap::getSnapToken($transaction);
             $redirect_url = Snap::createTransaction($transaction)->redirect_url;
-            $payment = new Payment();
 
+            // Create payment object
+            $payment = new Payment();
             $payment->reservation_id = $reservation->id;
             $payment->total = $reservation->total;
             $payment->payment_method = null;
             $payment->snap_token = $snapToken;
             $payment->paid_at = null;
+            $payment->direct_url = $redirect_url;
             $payment->save();
-            $payment->redirect_url = $redirect_url;
+
+            // Modify response to include payment inside reservation
+            $reservationData = $reservation->toArray();
+            $reservationData['payment'] = $payment;
 
             return response()->json([
                 'status' => 200,
                 'message' => 'Reservation created successfully',
                 'data' => [
-                    'reservation' => $reservation,
-                    'payment' => $payment
+                    'reservation' => $reservationData,  // Embed payment inside reservation
                 ],
             ]);
         } catch (\Exception $e) {
@@ -122,6 +282,31 @@ class UserReservationController extends Controller
                 'message' => 'Internal Server Error',
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    public function update(Request $request, $id)
+    {
+        $reservation = Reservation::find($id);
+        if (!$reservation) {
+            return response()->json([
+                'status' => 400,
+                'message' => 'Tidak ada data',
+            ], 400);
+        }
+
+        if ($reservation->status === 'PAID') {
+            return response()->json([
+                'status' => 400,
+                'message' => 'Reservasi sudah dibayar, tidak bisa dibatalkan',
+            ], 400);
+        } else {
+            $reservation->status = 'CANCELLED';
+            $reservation->save();
+            return response()->json([
+                'status' => 200,
+                'message' => 'Reservasi berhasil dibatalkan',
+            ], 200);
         }
     }
 }

@@ -20,6 +20,7 @@ class Payment extends Model
         'total',
         'payment_method',
         'snap_token',
+        'direct_url',
         'paid_at'
     ];
 

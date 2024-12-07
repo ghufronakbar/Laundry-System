@@ -5,28 +5,25 @@ namespace App\Http\Controllers;
 use App\Models\Machine;
 use App\Models\Reservation;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Log;
-use App\Models\User;
 use Carbon\Carbon;
 use Exception;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class UserMachineController extends Controller
 {
     public function index(Request $request)
     {
-        $currentTime = Carbon::now(); // Menggunakan waktu Indonesia
+        $currentTime = Carbon::now()->format('Y-m-d\TH:i:s.u') . 'Z';
 
         $washing_machine = Machine::where('name', 'WASHING')->first();
         $drying_machine = Machine::where('name', 'DRYING')->first();
-        $reservations = Reservation::get();
+        $reservations = Reservation::leftJoin('machines', 'reservations.machine_id', '=', 'machines.id')
+            ->select('reservations.*', 'machines.name as machine_name')
+            ->get();
 
         $washing_machines = [];
         if ($washing_machine) {
             for ($i = 1; $i <= $washing_machine->total_machine; $i++) {
-                // Periksa ketersediaan mesin menggunakan waktu Indonesia
                 $isAvailable = $this->checkMachineAvailability($reservations, $washing_machine->id, $i, $currentTime);
                 $washing_machines[] = [
                     'name' => 'WASHING ' . $i,
@@ -51,17 +48,11 @@ class UserMachineController extends Controller
             }
         }
 
-        Log::info('Machine data response', [
-            'current_time' => $currentTime->toDateTimeString(),
-            'washing_machines' => $washing_machines,
-            'drying_machines' => $drying_machines,
-        ]);
-
         return response()->json([
             'status' => 200,
             'message' => 'Data mesin',
             'data' => [
-                'current_time' => $currentTime->toDateTimeString(),
+                'current_time' => $currentTime,
                 'reservations' => $reservations,
                 'washing_machines' => $washing_machines,
                 'drying_machines' => $drying_machines,
@@ -81,15 +72,45 @@ class UserMachineController extends Controller
 
     private function checkMachineAvailability($reservations, $machineId, $machineNumber, $currentTime)
     {
-        $reservationsForMachine = $reservations->where('machine_id', $machineId)
-            ->where('machine_number', $machineNumber)
-            ->where('status', 'PAID');
+        // Log current time untuk memeriksa zona waktu dan format
+        Log::info('Current Time: ' . $currentTime);
 
+        // Ambil semua reservasi untuk mesin yang dimaksud
+        $reservationsForMachine = $reservations->filter(function ($reservation) use ($machineId, $machineNumber) {
+            return $reservation->machine_id == $machineId && $reservation->machine_number == $machineNumber;
+        })->filter(function ($reservation) {
+            return in_array($reservation->status, ['PAID', 'PENDING']);
+        });
+
+        // Log reservasi yang ditemukan
+        if ($reservationsForMachine->isEmpty()) {
+            Log::info("No reservations found for Machine {$machineNumber}.");
+        } else {
+            Log::info("Found reservations for Machine {$machineNumber}: " . $reservationsForMachine->count());
+        }
+
+        // Pastikan currentTime adalah objek Carbon, bukan string
+        $currentTime = Carbon::parse($currentTime);  // Menggunakan objek Carbon untuk currentTime
+        Log::info('Parsed Current Time: ' . $currentTime->toDateTimeString());
+
+        // Periksa setiap reservasi
         foreach ($reservationsForMachine as $reservation) {
-            if ($currentTime->greaterThanOrEqualTo($reservation->reservation_date) && $currentTime->lessThanOrEqualTo($reservation->reservation_end)) {
-                return false;
+            // Pastikan reservation_date dan reservation_end adalah objek Carbon
+            $reservationStart = Carbon::parse($reservation->reservation_date);
+            $reservationEnd = Carbon::parse($reservation->reservation_end);
+
+            // Log untuk memverifikasi waktu reservasi
+            Log::info('Reservation Start: ' . $reservationStart->toDateTimeString());
+            Log::info('Reservation End: ' . $reservationEnd->toDateTimeString());
+
+            // Periksa jika waktu sekarang berada dalam rentang waktu reservasi
+            if ($currentTime->greaterThanOrEqualTo($reservationStart) && $currentTime->lessThanOrEqualTo($reservationEnd)) {
+                Log::info("Machine {$machineNumber} is NOT available - Current Time is within reservation period.");
+                return false;  // Mesin tidak tersedia jika sekarang berada dalam periode reservasi
             }
         }
-        return true;
+
+        Log::info("Machine {$machineNumber} is available.");
+        return true;  // Mesin tersedia jika tidak ada reservasi yang aktif saat ini
     }
 }
