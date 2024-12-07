@@ -12,8 +12,8 @@ class TransactionController extends Controller
     {
         // Mengambil data reservation, users, payments, dan machines dengan join
         $transactions = Reservation::join('users', 'reservations.user_id', '=', 'users.id')
-            ->join('payments', 'reservations.id', '=', 'payments.reservation_id')
             ->join('machines', 'reservations.machine_id', '=', 'machines.id')  // Menambahkan join ke tabel machines
+            ->leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
             ->select(
                 'reservations.id as reservation_id',
                 'reservations.machine_number',
@@ -37,8 +37,8 @@ class TransactionController extends Controller
     {
         // Ambil detail transaksi berdasarkan ID
         $transaction = Reservation::join('users', 'reservations.user_id', '=', 'users.id')
-            ->join('payments', 'reservations.id', '=', 'payments.reservation_id')
             ->join('machines', 'reservations.machine_id', '=', 'machines.id')
+            ->leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
             ->where('reservations.id', $id)
             ->select(
                 'reservations.id as reservation_id',

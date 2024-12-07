@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\UserAuthController;
+use App\Http\Controllers\UserMachineController;
 use App\Http\Controllers\UserProfileController;
+use App\Http\Controllers\UserReservationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -20,9 +22,14 @@ Route::post('auth/login', [UserAuthController::class, 'login']);
 Route::post('auth/register', [UserAuthController::class, 'register']);
 
 Route::middleware('auth:sanctum')->group(function () {
-    // Profile Routes
-    Route::get('/profile', [UserProfileController::class, 'show']);
-    Route::put('/profile', [UserProfileController::class, 'update']);
-    Route::post('/profile', [UserProfileController::class, 'updatePicture']);
-    Route::delete('/profile', [UserProfileController::class, 'deletePicture']);
+    Route::prefix('profile')->group(function () {
+        Route::get('/', [UserProfileController::class, 'show']);
+        Route::put('/', [UserProfileController::class, 'update']);
+        Route::post('/', [UserProfileController::class, 'updatePicture']);
+        Route::delete('/', [UserProfileController::class, 'deletePicture']);
+    });
+
+    Route::apiResource('machines', UserMachineController::class);
+    Route::apiResource('reservations', UserReservationController::class);
+    Route::get('machines/test/test', [UserMachineController::class, 'testing']);
 });

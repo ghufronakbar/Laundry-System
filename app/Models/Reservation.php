@@ -19,8 +19,16 @@ class Reservation extends Model
 
     // Tentukan kolom yang dapat diisi (fillable)
     protected $fillable = [
-        'user_id', 'machine_id', 'machine_number', 'status', 'reservation_date'
+        'user_id',
+        'machine_id',
+        'machine_number',
+        'status',
+        'reservation_date',
+        'reservation_end',
     ];
+
+    protected $dates = ['reservation_date', 'reservation_end'];
+
 
     // Set UUID secara otomatis ketika membuat entri baru
     protected static function booted()

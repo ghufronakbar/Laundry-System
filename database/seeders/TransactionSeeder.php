@@ -29,40 +29,48 @@ class TransactionSeeder extends Seeder
         }
 
         // Cari mesin berdasarkan nama
-        $machine = Machine::whereName('WASHING')->first();
+        $washing = Machine::whereName('WASHING')->first();
+        $drying = Machine::whereName('DRYING')->first();
 
         // Pastikan mesin ditemukan
-        if (!$machine) {
+        if (!$washing) {
             $this->command->error("Machine with name 'WASHING' not found.");
+            return;
+        }
+
+        if (!$drying) {
+            $this->command->error("Machine with name 'DRYING' not found.");
             return;
         }
 
         // Buat data reservation
         $reservation1 = Reservation::create([
             'user_id' => $user->id,
-            'machine_id' => $machine->id,
-            'machine_number' => 1,  // Misal pilih mesin nomor 1
+            'machine_id' => $washing->id,
+            'machine_number' => 4,  // Misal pilih mesin nomor 1
             'status' => 'PAID',  // Status yang valid
-            'reservation_date' => '2024-12-07 00:00:00',
-            'total' => $machine->price,  // Pastikan total diisi dengan harga mesin
+            'reservation_date' => '2024-12-07T16:30:00.000000z',
+            'reservation_end' => '2024-12-07T17:00:00.000000z',
+            'total' => $washing->price,  // Pastikan total diisi dengan harga mesin
         ]);
 
         Payment::create([
             'id' => (string) Str::uuid(), // Generate UUID untuk kolom id
             'reservation_id' => $reservation1->id, // Menyimpan ID reservation yang baru dibuat
-            'total' => $machine->price,  // Total pembayaran
+            'total' => $washing->price,  // Total pembayaran
             'payment_method' => 'QRIS',
             'snap_token' => 'somerandomstringxxx', // Token pembayaran (dapat diubah)
-            'paid_at' => '2024-12-07 00:00:00',  // Waktu pembayaran
+            'paid_at' => '2024-12-07T11:00:00.000000z',  // Waktu pembayaran dalam format ISO 8601
         ]);
 
         $reservation2 = Reservation::create([
             'user_id' => $user->id,
-            'machine_id' => $machine->id,
-            'machine_number' => 1,  // Misal pilih mesin nomor 1
-            'status' => 'PENDING',  // Status yang valid
-            'reservation_date' => '2024-12-06 10:30:00',
-            'total' => $machine->price,  // Pastikan total diisi dengan harga mesin
+            'machine_id' => $drying->id,
+            'machine_number' => 2,  // Misal pilih mesin nomor 1
+            'status' => 'PAID',  // Status yang valid
+            'reservation_date' => '2024-12-07T17:00:00.000000z',
+            'reservation_end' => '2024-12-07T17:30:00.000000z',
+            'total' => $drying->price,  // Pastikan total diisi dengan harga mesin
         ]);
 
         // Buat data payment yang terkait dengan reservation yang baru dibuat
@@ -70,10 +78,10 @@ class TransactionSeeder extends Seeder
         Payment::create([
             'id' => (string) Str::uuid(), // Generate UUID untuk kolom id
             'reservation_id' => $reservation2->id, // Menyimpan ID reservation yang baru dibuat
-            'total' => $machine->price,  // Total pembayaran
-            'payment_method' => null,
+            'total' => $drying->price,  // Total pembayaran
+            'payment_method' => 'BNI',
             'snap_token' => 'somerandomstringxxx', // Token pembayaran (dapat diubah)
-            'paid_at' => null,  // Waktu pembayaran
+            'paid_at' => '2024-12-07T11:00:00.000000z',  // Waktu pembayaran dalam format ISO 8601
         ]);
     }
 }

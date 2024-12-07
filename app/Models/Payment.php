@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Payment extends Model
 {
@@ -15,12 +16,23 @@ class Payment extends Model
     protected $keyType = 'string'; // Gunakan string (UUID) sebagai primary key
 
     protected $fillable = [
-        'reservation_id', 'total', 'payment_method', 'snap_token', 'paid_at'
+        'reservation_id',
+        'total',
+        'payment_method',
+        'snap_token',
+        'paid_at'
     ];
 
     // Relasi dengan Reservation (1 to 1)
     public function reservation()
     {
         return $this->belongsTo(Reservation::class);
+    }
+
+    protected static function booted()
+    {
+        static::creating(function ($machine) {
+            $machine->id = (string) Str::uuid(); // Menghasilkan UUID saat entri dibuat
+        });
     }
 }
