@@ -48,6 +48,18 @@ class UserMachineController extends Controller
             }
         }
 
+        foreach ($drying_machines as &$drying_machine) {
+            $drying_machine['name'] = 'Mesin ' . $drying_machine['machine_number'];
+            unset($drying_machine['machine_number']);
+            unset($drying_machine['type']);
+        }
+
+        foreach ($washing_machines as &$washing_machine) {
+            $washing_machine['name'] = 'Mesin ' . $washing_machine['machine_number'];
+            unset($washing_machine['machine_number']);
+            unset($washing_machine['type']);
+        }
+
         return response()->json([
             'status' => 200,
             'message' => 'Data mesin',
@@ -117,7 +129,7 @@ class UserMachineController extends Controller
     public function show(Request $request, $params)
     {
         try {
-            // Validasi input
+
             if ($params !== 'WASHING' && $params !== 'DRYING') {
                 return response()->json([
                     'status' => 400,
@@ -131,11 +143,32 @@ class UserMachineController extends Controller
                 ], 400);
             }
 
-            // Validasi format tanggal
+
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $request->query('date'))) {
                 return response()->json([
                     'status' => 400,
                     'message' => 'Query date harus dalam format YYYY-MM-DD',
+                ], 400);
+            }
+
+            if (!$request->query('machine_number')) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Harus memiliki query machine_number',
+                ], 400);
+            }
+
+            if (!is_numeric($request->query('machine_number'))) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Query machine_number harus angka',
+                ], 400);
+            }
+
+            if ($request->query('machine_number') < 1) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Query machine_number harus lebih besar dari 0',
                 ], 400);
             }
 
@@ -154,18 +187,34 @@ class UserMachineController extends Controller
                 ];
             }
 
+            $checkMachine = Machine::where('name', $params)
+                ->where('total_machine', '>=', $request->query('machine_number'))
+                ->select('id')
+                ->first();
+
+            if (!$checkMachine) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Tidak ada data',
+                ], 400);
+            }
+
             // Ambil data reservasi untuk tanggal dan mesin yang diminta
             $date = Carbon::parse($request->query('date'));
             $reservations = Reservation::whereBetween('reservation_date', [
                 $date->startOfDay()->format('Y-m-d\TH:i:s.u\Z'),
                 $date->endOfDay()->format('Y-m-d\TH:i:s.u\Z'),
             ])
+                ->where('machine_number', $request->query('machine_number'))
                 ->join('machines', 'reservations.machine_id', '=', 'machines.id')
                 ->where('machines.name', $params)
                 ->whereIn('reservations.status', ['PAID', 'PENDING'])
                 ->select('reservations.*', 'machines.name as machine_name')
                 ->get();
 
+            $currentDate = Carbon::now()->format('Y-m-d\TH:i:s.u\Z');
+            $currentTime = Carbon::parse($currentDate)->format('H:i');
+            // return Carbon::parse($currentTime)->format('H:i');
             // Loop melalui setiap reservasi dan sesuaikan waktu yang terpengaruh
             foreach ($reservations as $reservation) {
                 // Ambil waktu dari reservation_date, hanya bagian hh:mm
@@ -173,17 +222,37 @@ class UserMachineController extends Controller
 
                 // Cari waktu yang cocok di array filteredAvailable dan tandai sebagai tidak tersedia
                 foreach ($filteredAvailable as &$timeSlot) {
-                    if ($timeSlot['time'] === $reservationTime) {
+                    if ($timeSlot['time'] === $reservationTime || Carbon::parse($currentTime)->format('H:i') >= $timeSlot['time']) {
                         $timeSlot['is_available'] = false;
                     }
                 }
             }
 
+            $morning = [];
+            $afternoon = [];
+            $night = [];
+
+            foreach ($filteredAvailable as $timeSlot) {
+                if (Carbon::parse($timeSlot['time'])->hour >= 3 && Carbon::parse($timeSlot['time'])->hour < 12) {
+                    $morning[] = $timeSlot;
+                } elseif (Carbon::parse($timeSlot['time'])->hour >= 12 && Carbon::parse($timeSlot['time'])->hour < 18) {
+                    $afternoon[] = $timeSlot;
+                } else {
+                    $night[] = $timeSlot;
+                }
+            }
+
+            $data = [
+                'morning' => $morning,
+                'afternoon' => $afternoon,
+                'night' => $night
+            ];
+
             // Kembalikan hasil filteredAvailable
             return response()->json([
                 'status' => 200,
                 'message' => 'Data ketersediaan mesin',
-                'data' => $filteredAvailable,
+                'data' => $data,
             ]);
         } catch (\Exception $e) {
             return response()->json([

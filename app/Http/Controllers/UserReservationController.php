@@ -29,7 +29,7 @@ class UserReservationController extends Controller
 
         $reservations = Reservation::where('user_id', $user->id)
             ->leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
-            ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total')->get();
+            ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total',)->get();
 
         $reservations->each(function ($reservation) {
             if (Carbon::now()->greaterThan($reservation->created_at->addMinutes(30)) && $reservation->status !== 'PAID' && $reservation->status !== 'CANCELLED') {
@@ -41,7 +41,18 @@ class UserReservationController extends Controller
 
         $reservations = Reservation::where('user_id', $user->id)
             ->leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
-            ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total')->get();
+            ->leftJoin('machines', 'reservations.machine_id', '=', 'machines.id')
+            ->select('reservations.id', 'reservations.created_at', 'reservations.machine_number', 'reservations.status', 'reservations.reservation_date', 'reservations.reservation_end', 'machines.name as machine_name')
+            ->orderBy('reservations.created_at')
+            ->get();
+
+        foreach ($reservations as $reservation) {
+            $normalizeMachineName = $reservation->machine_name === 'WASHING' ? 'Pencuci' : 'Pengering';
+            $reservation->title = "Reservasi Mesin " . $normalizeMachineName . " " . $reservation->machine_number;
+            unset($reservation['machine_name']);
+            unset($reservation['machine_number']);
+            unset($reservation['created_at']);
+        };
 
         $completed = $reservations->filter(function ($reservation) {
             return $reservation->status === 'PAID' && Carbon::now()->greaterThan($reservation->reservation_end);
@@ -90,9 +101,8 @@ class UserReservationController extends Controller
                 ], 400);
             }
 
-            // Ambil data reservation beserta pembayaran yang terkait
             $reservation = Reservation::leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
-                ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total', 'payments.payment_method', 'payments.paid_at', 'payments.direct_url',)
+                ->select('reservations.id', 'reservations.created_at', 'reservations.machine_number', 'reservations.status', 'reservations.reservation_date', 'reservations.reservation_end', 'payments.snap_token as snap_token', 'payments.total as payment_total', 'payments.payment_method', 'payments.paid_at', 'payments.direct_url',)
                 ->find($id);
 
             if (!$reservation) {
@@ -131,8 +141,16 @@ class UserReservationController extends Controller
 
             // Tentukan custom status untuk reservasi berdasarkan statusnya
             $reservation = Reservation::leftJoin('payments', 'reservations.id', '=', 'payments.reservation_id')
-                ->select('reservations.*', 'payments.snap_token as snap_token', 'payments.total as payment_total', 'payments.payment_method', 'payments.paid_at', 'payments.direct_url',)
+                ->leftJoin('machines', 'reservations.machine_id', '=', 'machines.id')
+                ->select('reservations.id', 'reservations.created_at', 'reservations.machine_number', 'machines.name as machine_name', 'reservations.status', 'reservations.reservation_date', 'reservations.reservation_end', 'payments.snap_token as snap_token', 'payments.total as payment_total', 'payments.payment_method', 'payments.paid_at', 'payments.direct_url',)
                 ->find($id);
+
+            $normalizeMachineName = $reservation->machine_name === "WASHING" ? "Pencuci" : "Pengering";
+            $reservation->title = "Reservasi Mesin " . $normalizeMachineName . " " . $reservation->machine_number;
+
+            unset($reservation['machine_name']);
+            unset($reservation['machine_number']);
+
             if ($reservation->status === 'PAID' && Carbon::now()->greaterThan($reservation->reservation_end)) {
                 $reservation->custom_status = 'COMPLETED';
             } else if ($reservation->status === 'PAID' && Carbon::now()->lessThanOrEqualTo($reservation->reservation_end)) {
@@ -144,7 +162,6 @@ class UserReservationController extends Controller
             }
 
             $reservationData = $reservation->toArray();
-            $reservationData['midtrans_status'] = $status;
 
             return response()->json([
                 'status' => 200,

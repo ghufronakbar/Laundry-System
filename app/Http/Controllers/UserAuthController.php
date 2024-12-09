@@ -22,17 +22,17 @@ class UserAuthController extends Controller
             // Validasi data request
             $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
-                'email' => 'required|string|email|max:255|unique:users',
+                'email' => 'required|string|email|max:255',
                 'password' => 'required|string|min:6',
                 'phone' => 'required|string',
             ]);
 
-            if($request->has('email') && User::where('email', $request->email)->exists()) {
+            if ($request->has('email') && User::where('email', $request->email)->exists()) {
                 return response()->json([
                     'status' => 400,
                     'message' => 'Email sudah terdaftar',
                     'data' => null
-                ]);
+                ], 400);
             }
             if ($validator->fails()) {
                 return response()->json([
@@ -62,7 +62,6 @@ class UserAuthController extends Controller
                     'token_type' => 'Bearer',
                 ],
             ], 201);
-
         } catch (Exception $e) {
             // Jika terjadi kesalahan sistem
             return response()->json([
@@ -84,7 +83,7 @@ class UserAuthController extends Controller
         try {
             // Validasi data request
             $validator = Validator::make($request->all(), [
-                'email' => 'required|string|email',
+                'email' => 'required|string',
                 'password' => 'required|string',
             ]);
 
@@ -120,7 +119,6 @@ class UserAuthController extends Controller
                     'token_type' => 'Bearer',
                 ],
             ], 200);
-
         } catch (Exception $e) {
             // Jika terjadi kesalahan sistem
             return response()->json([
