@@ -121,32 +121,19 @@ class UserProfileController extends Controller
                 ], 400);
             }
 
-            // Memeriksa apakah file profile_picture ada
             if ($request->hasFile('profile_picture')) {
                 $image = $request->file('profile_picture');
 
-                // Log File Info untuk memastikan file diterima
-                Log::info('Received file:', [
-                    'file_name' => $image->getClientOriginalName(),
-                    'file_size' => $image->getSize(),
-                    'file_extension' => $image->getClientOriginalExtension()
-                ]);
-
-                // Membuat nama file unik
                 $imageName = uniqid('profile_') . '.' . $image->getClientOriginalExtension();
 
-                // Menyimpan gambar ke public/images/profile_pictures
                 $image->storeAs('images/profile_pictures', $imageName, 'public');
 
-                // Mengambil user yang sedang login
                 $user = Auth::user();
 
-                // Menghapus gambar lama jika ada
                 if ($user->profile_picture && Storage::disk('public')->exists('images/profile_pictures/' . $user->profile_picture)) {
                     Storage::disk('public')->delete('images/profile_pictures/' . $user->profile_picture);
                 }
 
-                // Mengupdate kolom profile_picture di user
                 $user->profile_picture = $imageName;
                 if ($user instanceof User) {
                     $user->save();
@@ -162,7 +149,6 @@ class UserProfileController extends Controller
                     'data' => $user,
                 ], 200);
             } else {
-                // Jika file tidak ditemukan
                 return response()->json([
                     'status' => 400,
                     'message' => 'Gambar tidak ditemukan',
@@ -170,12 +156,6 @@ class UserProfileController extends Controller
                 ], 400);
             }
         } catch (Exception $e) {
-            // Menambahkan log error untuk debugging
-            Log::error('Error updating profile picture: ' . $e->getMessage(), [
-                'exception' => $e,
-                'trace' => $e->getTrace(),
-            ]);
-
             return response()->json([
                 'status' => 500,
                 'message' => 'Ada kesalahan sistem',
@@ -194,27 +174,13 @@ class UserProfileController extends Controller
     public function deletePicture()
     {
         try {
-            // Mendapatkan user yang sedang login
             $user = Auth::user();
-
-            // Memeriksa apakah user memiliki foto profil
-            if (!$user->profile_picture) {
-                return response()->json([
-                    'status' => 400,
-                    'message' => 'Tidak ada foto profil untuk dihapus',
-                    'data' => null,
-                ], 400);
-            }
-
-            // Menyusun path gambar profil yang ada
             $profilePicturePath = 'images/profile_pictures/' . $user->profile_picture;
 
-            // Menghapus gambar profil dari storage jika ada
             if (Storage::disk('public')->exists($profilePicturePath)) {
                 Storage::disk('public')->delete($profilePicturePath);
             }
 
-            // Menghapus referensi gambar dari kolom profile_picture
             $user->profile_picture = null;
             if ($user instanceof User) {
                 $user->save();
@@ -223,19 +189,13 @@ class UserProfileController extends Controller
             return response()->json([
                 'status' => 200,
                 'message' => 'Foto profil berhasil dihapus',
-                'data' => null,
+                'data' => $user,
             ], 200);
         } catch (Exception $e) {
-            // Menambahkan log error untuk debugging
-            Log::error('Error deleting profile picture: ' . $e->getMessage(), [
-                'exception' => $e,
-                'trace' => $e->getTrace(),
-            ]);
-
             return response()->json([
                 'status' => 500,
                 'message' => 'Ada kesalahan sistem',
-                'data' => null,
+                'data' => $e->getMessage(),
             ], 500);
         }
     }
