@@ -51,21 +51,21 @@ class UserMachineController extends Controller
         foreach ($drying_machines as &$drying_machine) {
             $drying_machine['name'] = 'Mesin ' . $drying_machine['machine_number'];
             unset($drying_machine['machine_number']);
-            unset($drying_machine['type']);
+            // unset($drying_machine['type']);
         }
 
         foreach ($washing_machines as &$washing_machine) {
             $washing_machine['name'] = 'Mesin ' . $washing_machine['machine_number'];
             unset($washing_machine['machine_number']);
-            unset($washing_machine['type']);
+            // unset($washing_machine['type']);
         }
 
         return response()->json([
             'status' => 200,
             'message' => 'Data mesin',
             'data' => [
-                'current_time' => $currentTime,
-                'reservations' => $reservations,
+                // 'current_time' => $currentTime,
+                // 'reservations' => $reservations,
                 'washing_machines' => $washing_machines,
                 'drying_machines' => $drying_machines,
             ]
@@ -216,17 +216,29 @@ class UserMachineController extends Controller
             $currentTime = Carbon::parse($currentDate)->format('H:i');
             // return Carbon::parse($currentTime)->format('H:i');
             // Loop melalui setiap reservasi dan sesuaikan waktu yang terpengaruh
+            $formattedCurDate = Carbon::parse($currentDate)->format('Y-m-d');
             foreach ($reservations as $reservation) {
                 // Ambil waktu dari reservation_date, hanya bagian hh:mm
                 $reservationTime = Carbon::parse($reservation->reservation_date)->format('H:i');
+                // $reservationDate = Carbon::parse($reservation->reservation_date)->format('Y-m-d');
 
                 // Cari waktu yang cocok di array filteredAvailable dan tandai sebagai tidak tersedia
                 foreach ($filteredAvailable as &$timeSlot) {
-                    if ($timeSlot['time'] === $reservationTime || Carbon::parse($currentTime)->format('H:i') >= $timeSlot['time']) {
+                    if ($timeSlot['time'] === $reservationTime || $currentTime >= $timeSlot['time']) {
                         $timeSlot['is_available'] = false;
                     }
+                    // if ($request->query('date') < $formattedCurDate) {
+                    //     $timeSlot['is_available'] = false;
+                    // }
                 }
             }
+
+            // Jika current date lebih tinggi maka semua is_available false
+            // if (Carbon::parse($request->query('date'))->gt(Carbon::now()->format('Y-m-d'))) {
+            //     foreach ($filteredAvailable as &$timeSlot) {
+            //         $timeSlot['is_available'] = false;
+            //     }
+            // }
 
             $morning = [];
             $afternoon = [];
@@ -237,7 +249,9 @@ class UserMachineController extends Controller
                     $morning[] = $timeSlot;
                 } elseif (Carbon::parse($timeSlot['time'])->hour >= 12 && Carbon::parse($timeSlot['time'])->hour < 18) {
                     $afternoon[] = $timeSlot;
-                } else {
+                } elseif (Carbon::parse($timeSlot['time'])->hour >= 18 && Carbon::parse($timeSlot['time'])->hour < 24) {
+                    $night[] = $timeSlot;
+                } elseif (Carbon::parse($timeSlot['time'])->hour >= 0 && Carbon::parse($timeSlot['time'])->hour < 3) {
                     $night[] = $timeSlot;
                 }
             }

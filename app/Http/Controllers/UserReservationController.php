@@ -46,14 +46,6 @@ class UserReservationController extends Controller
             ->orderBy('reservations.created_at')
             ->get();
 
-        foreach ($reservations as $reservation) {
-            $normalizeMachineName = $reservation->machine_name === 'WASHING' ? 'Pencuci' : 'Pengering';
-            $reservation->title = "Reservasi Mesin " . $normalizeMachineName . " " . $reservation->machine_number;
-            unset($reservation['machine_name']);
-            unset($reservation['machine_number']);
-            unset($reservation['created_at']);
-        };
-
         $completed = $reservations->filter(function ($reservation) {
             return $reservation->status === 'PAID' && Carbon::now()->greaterThan($reservation->reservation_end);
         })->values();
@@ -69,6 +61,14 @@ class UserReservationController extends Controller
         $unpaid = $reservations->filter(function ($reservation) {
             return $reservation->status === 'PENDING';
         })->values();
+
+        foreach ($reservations as $reservation) {
+            $normalizeMachineName = $reservation->machine_name === 'WASHING' ? 'Pencuci' : 'Pengering';
+            $reservation->title = "Reservasi Mesin " . $normalizeMachineName . " " . $reservation->machine_number;
+            unset($reservation['machine_name']);
+            unset($reservation['machine_number']);
+            // unset($reservation['created_at']);
+        };
 
         $data = [
             'completed' => $completed,
@@ -195,7 +195,7 @@ class UserReservationController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'machine_id' => 'required',
+            'machine_type' => 'required',
             'machine_number' => 'required|numeric',
             'date' => 'required|date',
             'time' => 'required|date_format:H:i',
@@ -209,7 +209,14 @@ class UserReservationController extends Controller
             ], 400);
         }
 
-        $machine = Machine::find($request->machine_id);
+        if ($request->machine_type !== 'WASHING' && $request->machine_type !== 'DRYING') {
+            return response()->json([
+                'status' => 400,
+                'message' => 'Jenis mesin tidak valid',
+            ]);
+        }
+
+        $machine = Machine::where('name', $request->machine_type)->first();
 
         if (!$machine) {
             return response()->json([
@@ -226,7 +233,7 @@ class UserReservationController extends Controller
         }
 
 
-        $reservation = Reservation::where('machine_id', $request->machine_id)
+        $reservation = Reservation::where('machine_id', $machine->id)
             ->where('reservation_date', Carbon::parse($request->date . ' ' . $request->time)->format('Y-m-d\TH:i:s.u') . 'Z')
             ->where('machine_number', $request->machine_number)
             ->where(function ($query) {
@@ -243,7 +250,7 @@ class UserReservationController extends Controller
 
         try {
             $reservation = new Reservation();
-            $reservation->machine_id = $request->machine_id;
+            $reservation->machine_id = $machine->id;
             $reservation->machine_number = $request->machine_number;
             $reservation->reservation_date = Carbon::parse($request->date . ' ' . $request->time)->format('Y-m-d\TH:i:s.u') . 'Z';
             $reservation->reservation_end = Carbon::parse($request->date . ' ' . $request->time)->addMinutes(30)->format('Y-m-d\TH:i:s.u') . 'Z';
@@ -286,10 +293,8 @@ class UserReservationController extends Controller
 
             return response()->json([
                 'status' => 200,
-                'message' => 'Reservation created successfully',
-                'data' => [
-                    'reservation' => $reservationData,  // Embed payment inside reservation
-                ],
+                'message' => 'Berhasil membuat reservasi',
+                'data' =>  $reservation,  // Embed payment inside reservation
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -321,6 +326,7 @@ class UserReservationController extends Controller
             return response()->json([
                 'status' => 200,
                 'message' => 'Reservasi berhasil dibatalkan',
+                'data' => $reservation,
             ], 200);
         }
     }
