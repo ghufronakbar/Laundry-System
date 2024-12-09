@@ -20,22 +20,15 @@ class UserProfileController extends Controller
     public function show()
     {
         try {
-            // Mendapatkan user yang sedang login
             $user = Auth::user();
             $user->image_url = $user->profile_picture ?  url('storage/images/profile_pictures/' . $user->profile_picture) : null;
 
-            // Response sukses dengan data profil pengguna
             return response()->json([
                 'status' => 200,
                 'message' => 'Profil pengguna',
                 'data' => $user,
             ], 200);
         } catch (Exception $e) {
-            // Menambahkan log untuk debugging
-            Log::error('Error fetching profile: ' . $e->getMessage(), [
-                'exception' => $e,
-                'trace' => $e->getTrace(),
-            ]);
 
             return response()->json([
                 'status' => 500,
@@ -57,8 +50,8 @@ class UserProfileController extends Controller
             // Validasi input untuk nama, email, dan phone
             $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
-                'email' => 'required|string|email|max:255|unique:users,email,' . Auth::id(),
-                'phone' => 'nullable|string|max:20',
+                'email' => 'required|string|email|max:255,' . Auth::id(),
+                'phone' => 'required|string|max:20',
             ]);
 
             if ($request->has('email') && User::where('email', $request->email)->exists() && $request->email != Auth::user()->email) {
@@ -66,7 +59,7 @@ class UserProfileController extends Controller
                     'status' => 400,
                     'message' => 'Email sudah terdaftar',
                     'data' => null
-                ]);
+                ], 400);
             }
             if ($validator->fails()) {
                 return response()->json([
@@ -76,11 +69,9 @@ class UserProfileController extends Controller
                 ], 400);
             }
 
-            // Mengambil data user yang sedang login
             $user = Auth::user();
 
             if ($user instanceof User) {
-                // Proses update
                 $user->fill([
                     'name' => $request->name,
                     'email' => $request->email,

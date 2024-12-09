@@ -55,13 +55,13 @@ class UserAuthController extends Controller
 
             // Response sukses
             return response()->json([
-                'status' => 201,
+                'status' => 200,
                 'message' => 'Registration successful',
                 'data' => [
                     'access_token' => $token,
                     'token_type' => 'Bearer',
                 ],
-            ], 201);
+            ], 200);
         } catch (Exception $e) {
             // Jika terjadi kesalahan sistem
             return response()->json([
