@@ -22,6 +22,9 @@ Route::post('/', [AuthController::class, 'login']);
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
 Route::get('/logout', [AuthController::class, 'logout'])->name('logout');
+Route::get('/map', function () {
+    return view('map');
+})->name('map');
 
 
 // Route untuk halaman dashboard yang hanya bisa diakses oleh admin

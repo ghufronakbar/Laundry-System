@@ -71,10 +71,10 @@ class UserReservationController extends Controller
         };
 
         $data = [
-            'completed' => $completed,
-            'on_going' => $on_going,
-            'cancelled' => $cancelled,
-            'unpaid' => $unpaid
+            'completed' => $completed->sortByDesc('created_at')->values(),
+            'on_going' => $on_going->sortByDesc('created_at')->values(),
+            'cancelled' => $cancelled->sortByDesc('created_at')->values(),
+            'unpaid' => $unpaid->sortByDesc('created_at')->values()
         ];
 
         return response()->json([

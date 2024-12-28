@@ -15,6 +15,12 @@ class UserMachineController extends Controller
     {
         $currentTime = Carbon::now()->format('Y-m-d\TH:i:s.u') . 'Z';
 
+        $currentDate = Carbon::now()->format('Y-m-d\TH:i:s.u\Z');
+
+        $formattedCurTime = Carbon::parse($currentDate)->addHours(7)->addMinutes(30)->format('H:i');
+
+        // return $formattedCurTime;
+
         $washing_machine = Machine::where('name', 'WASHING')->first();
         $drying_machine = Machine::where('name', 'DRYING')->first();
         $reservations = Reservation::leftJoin('machines', 'reservations.machine_id', '=', 'machines.id')
@@ -24,7 +30,7 @@ class UserMachineController extends Controller
         $washing_machines = [];
         if ($washing_machine) {
             for ($i = 1; $i <= $washing_machine->total_machine; $i++) {
-                $isAvailable = $this->checkMachineAvailability($reservations, $washing_machine->id, $i, $currentTime);
+                $isAvailable = $this->checkMachineAvailability($reservations, $washing_machine->id, $i, $formattedCurTime);
                 $washing_machines[] = [
                     'name' => 'WASHING ' . $i,
                     'type' => 'WASHING',
@@ -38,7 +44,7 @@ class UserMachineController extends Controller
         if ($drying_machine) {
             for ($i = 1; $i <= $drying_machine->total_machine; $i++) {
                 // Periksa ketersediaan mesin menggunakan waktu Indonesia
-                $isAvailable = $this->checkMachineAvailability($reservations, $drying_machine->id, $i, $currentTime);
+                $isAvailable = $this->checkMachineAvailability($reservations, $drying_machine->id, $i, $formattedCurTime);
                 $drying_machines[] = [
                     'name' => 'DRYING ' . $i,
                     'type' => 'DRYING',
@@ -217,6 +223,8 @@ class UserMachineController extends Controller
             // return Carbon::parse($currentTime)->format('H:i');
             // Loop melalui setiap reservasi dan sesuaikan waktu yang terpengaruh
             $formattedCurDate = Carbon::parse($currentDate)->format('Y-m-d');
+            $formattedCurTime = Carbon::parse($currentDate)->addHours(7)->format('H:i');
+
             foreach ($reservations as $reservation) {
                 // Ambil waktu dari reservation_date, hanya bagian hh:mm
                 $reservationTime = Carbon::parse($reservation->reservation_date)->format('H:i');
@@ -227,24 +235,25 @@ class UserMachineController extends Controller
                     if ($timeSlot['time'] === $reservationTime || $currentTime >= $timeSlot['time']) {
                         $timeSlot['is_available'] = false;
                     }
-                    // if ($request->query('date') < $formattedCurDate) {
-                    //     $timeSlot['is_available'] = false;
-                    // }
+                    if ($request->query('date') < $formattedCurDate) {
+                        $timeSlot['is_available'] = false;
+                    }
                 }
             }
-
-            // Jika current date lebih tinggi maka semua is_available false
-            // if (Carbon::parse($request->query('date'))->gt(Carbon::now()->format('Y-m-d'))) {
-            //     foreach ($filteredAvailable as &$timeSlot) {
-            //         $timeSlot['is_available'] = false;
-            //     }
-            // }
 
             $morning = [];
             $afternoon = [];
             $night = [];
 
             foreach ($filteredAvailable as $timeSlot) {
+                if ($request->query('date') < $formattedCurDate) {
+                    $timeSlot['is_available'] = false;
+                }
+
+                if (($formattedCurTime >= Carbon::parse($timeSlot['time'])->format('H:i')) && ($request->query('date') == $formattedCurDate)) {
+                    $timeSlot['is_available'] = false;
+                }
+
                 if (Carbon::parse($timeSlot['time'])->hour >= 3 && Carbon::parse($timeSlot['time'])->hour < 12) {
                     $morning[] = $timeSlot;
                 } elseif (Carbon::parse($timeSlot['time'])->hour >= 12 && Carbon::parse($timeSlot['time'])->hour < 18) {
